@@ -797,6 +797,10 @@ void allocator_traffic_summary(struct allocator *allocator)
 {
 	size_t total_sent = 0;
 	size_t total_recv = 0;
+	size_t max_latency = 0;
+	size_t avg_latency = 0;
+	size_t total_latency = 0;
+	size_t min_latency = SIZE_MAX;
 	double total_send_bitrate = 0;
 	double total_recv_bitrate = 0;
 	ssize_t lost;
@@ -811,12 +815,19 @@ void allocator_traffic_summary(struct allocator *allocator)
 
 		total_sent    += sender_get_packets(alloc->sender);
 		total_recv    += alloc->recv.total_packets;
+		if (alloc->recv.max_latency > max_latency)
+			max_latency = alloc->recv.max_latency;
+		if (alloc->recv.min_latency &&
+		    alloc->recv.min_latency < min_latency)
+			min_latency = alloc->recv.min_latency;
 
+		total_latency += alloc->recv.sum_latency;
 		total_send_bitrate += sender_get_bitrate(alloc->sender);
 		total_recv_bitrate += receiver_get_bitrate(&alloc->recv);
 	}
 
 	lost = total_sent - total_recv;
+	avg_latency = total_latency / total_recv;
 
 	re_printf("traffic summary:\n");
 	re_printf("total send bitrate:   %H\n",
@@ -825,6 +836,9 @@ void allocator_traffic_summary(struct allocator *allocator)
 		  print_bitrate, &total_recv_bitrate);
 	re_printf("total sent:           %zu packets\n", total_sent);
 	re_printf("total received:       %zu packets\n", total_recv);
+	re_printf("min latency:          %zu ms\n", min_latency);
+	re_printf("avg latency:          %zu ms\n", avg_latency);
+	re_printf("max latency:          %zu ms\n", max_latency);
 	re_printf("lost packets:         %zu packets (%.2f%% loss)\n",
 		  lost, 100.0 * lost / total_sent);
 	re_printf("\n");

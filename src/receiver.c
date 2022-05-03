@@ -27,14 +27,18 @@ int receiver_recv(struct receiver *recvr,
 {
 	struct hdr hdr;
 	uint64_t now = tmr_jiffies();
+	uint64_t l;
 	size_t start, sz;
 	int err;
 
 	if (!recvr || !mb)
 		return EINVAL;
 
-	if (!recvr->ts_start)
+	if (!recvr->ts_start) {
 		recvr->ts_start = now;
+		recvr->min_latency = UINT64_MAX;
+	}
+
 	recvr->ts_last = now;
 
 	start = mb->pos;
@@ -82,6 +86,17 @@ int receiver_recv(struct receiver *recvr,
 				   recvr->last_seq, hdr.seq);
 		}
 	}
+
+	/* min. max. latency calculation */
+	l = now - hdr.timestamp;
+	if (l > recvr->max_latency)
+		recvr->max_latency = l;
+
+	if (l < recvr->min_latency)
+		recvr->min_latency = l;
+
+	/* sum for avg calculation */
+	recvr->sum_latency += l;
 
 #if 0
 	protocol_packet_dump(&hdr);

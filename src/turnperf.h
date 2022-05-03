@@ -86,6 +86,9 @@ struct receiver {
 	uint64_t total_bytes;
 	uint64_t total_packets;
 	uint32_t last_seq;
+	uint64_t max_latency;
+	uint64_t min_latency;
+	uint64_t sum_latency;
 };
 
 void receiver_init(struct receiver *recv,
@@ -100,7 +103,7 @@ double receiver_get_bitrate(const struct receiver *recv);
  * protocol
  */
 
-#define HDR_SIZE 20
+#define HDR_SIZE 28
 #define PATTERN 0xa5
 
 struct hdr {
@@ -108,6 +111,7 @@ struct hdr {
 	uint32_t alloc_id;
 	uint32_t seq;
 	uint32_t payload_len;
+	uint64_t timestamp;
 
 	uint8_t payload[256];
 };
