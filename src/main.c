@@ -25,12 +25,14 @@ static struct {
 	struct tls *tls;
 	struct stun_dns *dns;
 	bool turn_ind;
+	uint32_t timeout;
 } turnperf = {
 	.user    = "demo",
 	.pass    = "secret",
 	.proto   = IPPROTO_UDP,
 	.bitrate = 64000,
-	.psize   = 160
+	.psize   = 160,
+	.timeout = 10000
 };
 
 
@@ -198,13 +200,40 @@ static void dns_handler(int err, const struct sa *srv, void *arg)
 }
 
 
+static void timeout(void *arg)
+{
+	int *err = arg;
+
+	*err = ETIMEDOUT;
+
+	signal_handler(0);
+}
+
+
+static int re_main_timeout(uint32_t timeout_ms)
+{
+	struct tmr tmr;
+	int err = 0;
+
+	tmr_init(&tmr);
+
+	tmr_start(&tmr, timeout_ms, timeout, &err);
+	(void)re_main(signal_handler);
+
+	tmr_cancel(&tmr);
+	return err;
+}
+
+
 static void usage(void)
 {
 	re_fprintf(stderr,
-			 "turnperf -ihtT -u <user> -p <pass> "
+			 "turnperf -wihtT -u <user> -p <pass> "
 			 "-P <port> turn-server\n");
 	re_fprintf(stderr, "\t-h            Show summary of options\n");
 	re_fprintf(stderr, "\t-m <method>   Use async polling method\n");
+	re_fprintf(stderr,
+		   "\t-w <seconds>  Wait timeout (default 10 seconds)\n");
 	re_fprintf(stderr, "\n");
 	re_fprintf(stderr, "TURN server options:\n");
 	re_fprintf(stderr, "\t-u <user>     TURN Username\n");
@@ -238,11 +267,15 @@ int main(int argc, char *argv[])
 
 	for (;;) {
 
-		const int c = getopt(argc, argv, "a:b:s:u:p:P:tTDhim:");
+		const int c = getopt(argc, argv, "w:a:b:s:u:p:P:tTDhim:");
 		if (0 > c)
 			break;
 
 		switch (c) {
+
+		case 'w':
+			turnperf.timeout = atoi(optarg) * 1000;
+			break;
 
 		case 'a':
 			gallocator.num_allocations = atoi(optarg);
@@ -430,7 +463,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	re_main(signal_handler);
+	re_main_timeout(turnperf.timeout);
 
 	if (turnperf.err) {
 		re_fprintf(stderr, "turn performance failed (%m)\n",
