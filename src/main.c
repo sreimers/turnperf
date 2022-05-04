@@ -37,7 +37,9 @@ static struct {
 
 
 static struct allocator gallocator = {
-	.num_allocations = 100,
+	.num_allocations = 1,
+	.quiet = false,
+	.csv = false
 };
 
 
@@ -65,13 +67,16 @@ static void allocation_handler(int err, uint16_t scode, const char *reason,
 
 	allocator->num_received++;
 
-	re_fprintf(stderr, "\r[ allocations: %u ]", allocator->num_received);
+	if (!allocator->quiet)
+		re_fprintf(stderr, "\r[ allocations: %u ]",
+			   allocator->num_received);
 
 	if (allocator->num_received >= allocator->num_allocations) {
 
-		re_printf("all allocations are ok.\n");
+		if (!allocator->quiet)
+			re_printf("all allocations are ok.\n");
 
-		if (allocator->server_info) {
+		if (allocator->server_info && !allocator->quiet) {
 			re_printf("\nserver:  %s, authentication=%s\n",
 				  allocator->server_software,
 				  allocator->server_auth ? "yes" : "no");
@@ -154,14 +159,14 @@ static void tmr_grace_handler(void *arg)
 static void signal_handler(int signum)
 {
 	static bool term = false;
-	(void)signum;
 
 	if (term) {
 		re_fprintf(stderr, "forced exit\n");
 		exit(2);
 	}
 
-	re_fprintf(stderr, "cancelled\n");
+	if (signum)
+		re_fprintf(stderr, "cancelled\n");
 	term = true;
 
 	if (gallocator.num_received > 0) {
@@ -169,9 +174,12 @@ static void signal_handler(int signum)
 
 		allocator_stop_senders(&gallocator);
 
-		re_printf("total duration: %H\n", fmt_human_time, &duration);
+		if (!gallocator.quiet) {
+			re_printf("total duration: %H\n", fmt_human_time,
+				  &duration);
+			re_printf("wait 1 second for traffic to settle..\n");
+		}
 
-		re_printf("wait 1 second for traffic to settle..\n");
 		tmr_start(&turnperf.tmr_grace, 1000, tmr_grace_handler, 0);
 	}
 	else {
@@ -234,6 +242,8 @@ static void usage(void)
 	re_fprintf(stderr, "\t-m <method>   Use async polling method\n");
 	re_fprintf(stderr,
 		   "\t-w <seconds>  Wait timeout (default 10 seconds)\n");
+	re_fprintf(stderr, "\t-q            Quiet\n");
+	re_fprintf(stderr, "\t-c            CSV output\n");
 	re_fprintf(stderr, "\n");
 	re_fprintf(stderr, "TURN server options:\n");
 	re_fprintf(stderr, "\t-u <user>     TURN Username\n");
@@ -242,7 +252,8 @@ static void usage(void)
 	re_fprintf(stderr, "\t-i            Use data/send indications\n");
 	re_fprintf(stderr, "\n");
 	re_fprintf(stderr, "Traffic options:\n");
-	re_fprintf(stderr, "\t-a <num>      Number of TURN allocations\n");
+	re_fprintf(stderr,
+		   "\t-a <num>      Number of TURN allocations (default 1)\n");
 	re_fprintf(stderr, "\t-b <bitrate>  Bitrate per allocation"
 		   " (bits/s)\n");
 	re_fprintf(stderr, "\t-s <bytes>    Packet size in bytes\n");
@@ -267,7 +278,7 @@ int main(int argc, char *argv[])
 
 	for (;;) {
 
-		const int c = getopt(argc, argv, "w:a:b:s:u:p:P:tTDhim:");
+		const int c = getopt(argc, argv, "w:a:b:s:u:p:P:tTDhiqcm:");
 		if (0 > c)
 			break;
 
@@ -332,6 +343,14 @@ int main(int argc, char *argv[])
 		}
 			break;
 
+		case 'q':
+			gallocator.quiet = true;
+			break;
+		case 'c':
+			gallocator.quiet = true;
+			gallocator.csv = true;
+			break;
+
 		case '?':
 			err = EINVAL;
 			/*@fallthrough@*/
@@ -381,7 +400,8 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	re_printf("using async polling method '%s' with maxfds=%d\n",
+	if (!gallocator.quiet)
+		re_printf("using async polling method '%s' with maxfds=%d\n",
 		  poll_method_name(method), maxfds);
 
 	if (secure) {
@@ -412,19 +432,23 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	re_printf("turnperf version %s\n", VERSION);
-	re_printf("bitrate: %u bits/second (per allocation)\n",
-		  turnperf.bitrate);
-	re_printf("session cookie: 0x%08x\n", gallocator.session_cookie);
-	re_printf("using TURN %s\n",
-		  turnperf.turn_ind ? "DATA/SEND indications" : "Channels");
+	if (!gallocator.quiet) {
+		re_printf("turnperf version %s\n", VERSION);
+		re_printf("bitrate: %u bits/second (per allocation)\n",
+			  turnperf.bitrate);
+		re_printf("session cookie: 0x%08x\n",
+			  gallocator.session_cookie);
+		re_printf("using TURN %s\n", turnperf.turn_ind
+						     ? "DATA/SEND indications"
+						     : "Channels");
+	}
 
 	if (0 == sa_set_str(&turnperf.srv, argv[optind],
 			    port ? port : dport)) {
 
-		re_printf("server: %J protocol=%s\n",
-			  &turnperf.srv,
-			  protocol_name(turnperf.proto, secure));
+		if (!gallocator.quiet)
+			re_printf("server: %J protocol=%s\n", &turnperf.srv,
+				  protocol_name(turnperf.proto, secure));
 
 		/* create a bunch of allocations, with timing */
 		allocator_start(&gallocator);
@@ -432,8 +456,9 @@ int main(int argc, char *argv[])
 	else {
 		const char *stun_proto, *stun_usage;
 
-		re_printf("server: %s protocol=%s\n",
-			  host, protocol_name(turnperf.proto, secure));
+		if (!gallocator.quiet)
+			re_printf("server: %s protocol=%s\n", host,
+				  protocol_name(turnperf.proto, secure));
 
 		stun_usage = secure ? stuns_usage_relay : stun_usage_relay;
 

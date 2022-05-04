@@ -97,9 +97,10 @@ static void perm_handler(void *arg)
 {
 	struct allocation *alloc = arg;
 
-	re_printf("%s to %J added.\n",
-		  alloc->turn_ind ? "Permission" : "Channel",
-		  &alloc->peer);
+	if (!alloc->allocator->quiet)
+		re_printf("%s to %J added.\n",
+			  alloc->turn_ind ? "Permission" : "Channel",
+			  &alloc->peer);
 
 	alloc->alloch(0, 0, "OK", &alloc->srv, &alloc->relay, alloc->arg);
 }
@@ -666,11 +667,15 @@ int allocator_start_senders(struct allocator *allocator, unsigned bitrate,
 
 	ptime = calculate_ptime(bitrate, psize);
 
-	re_printf("starting traffic generators:"
-		  " psize=%zu, ptime=%u (total target bitrate is %H)\n",
-		  psize, ptime, print_bitrate, &tbps);
+	if (!allocator->quiet) {
+		re_printf(
+			"starting traffic generators:"
+			" psize=%zu, ptime=%u (total target bitrate is %H)\n",
+			psize, ptime, print_bitrate, &tbps);
+	}
 
-	tmr_start(&allocator->tmr_ui, 1, tmr_ui_handler, allocator);
+	if (!allocator->quiet)
+		tmr_start(&allocator->tmr_ui, 1, tmr_ui_handler, allocator);
 
 	for (le = allocator->allocl.head; le; le = le->next) {
 		struct allocation *alloc = le->data;
@@ -770,7 +775,7 @@ void allocator_reset(struct allocator *allocator)
 
 void allocator_show_summary(const struct allocator *allocator)
 {
-	if (!allocator)
+	if (!allocator || allocator->quiet)
 		return;
 
 	if (allocator->tock > allocator->tick) {
@@ -827,7 +832,17 @@ void allocator_traffic_summary(struct allocator *allocator)
 	}
 
 	lost = total_sent - total_recv;
-	avg_latency = total_latency / total_recv;
+	if (total_recv)
+		avg_latency = total_latency / total_recv;
+
+	if (allocator->csv) {
+		re_printf("minlat;avglat;maxlat;total_sent;total_recv;lost\n");
+
+		re_printf("%zu;%zu;%zu;%zu;%zu;%zu\n", min_latency,
+			  avg_latency, max_latency, total_sent, total_recv,
+			  lost);
+		return;
+	}
 
 	re_printf("traffic summary:\n");
 	re_printf("total send bitrate:   %H\n",

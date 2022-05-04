@@ -37,6 +37,8 @@ struct allocator {
 	time_t traf_start_time;
 
 	struct tmr tmr_pace;
+	bool quiet;
+	bool csv;
 };
 
 struct allocation;
