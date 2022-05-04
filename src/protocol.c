@@ -22,7 +22,7 @@ int protocol_encode(struct mbuf *mb,
 	err |= mbuf_write_u32(mb, htonl(session_cookie));
 	err |= mbuf_write_u32(mb, htonl(alloc_id));
 	err |= mbuf_write_u32(mb, htonl(seq));
-	err |= mbuf_write_u64(mb, htonl(tmr_jiffies()));
+	err |= mbuf_write_u64(mb, sys_htonll(tmr_jiffies()));
 	err |= mbuf_write_u32(mb, htonl((uint32_t)payload_len));
 	err |= mbuf_fill(mb, pattern, payload_len);
 
@@ -53,7 +53,7 @@ int protocol_decode(struct hdr *hdr, struct mbuf *mb)
 	hdr->session_cookie = ntohl(mbuf_read_u32(mb));
 	hdr->alloc_id       = ntohl(mbuf_read_u32(mb));
 	hdr->seq            = ntohl(mbuf_read_u32(mb));
-	hdr->timestamp      = ntohl(mbuf_read_u64(mb));
+	hdr->timestamp      = sys_ntohll(mbuf_read_u64(mb));
 	hdr->payload_len    = ntohl(mbuf_read_u32(mb));
 
 	if (mbuf_get_left(mb) < hdr->payload_len) {
