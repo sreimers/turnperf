@@ -822,8 +822,7 @@ void allocator_traffic_summary(struct allocator *allocator)
 		total_recv    += alloc->recv.total_packets;
 		if (alloc->recv.max_latency > max_latency)
 			max_latency = alloc->recv.max_latency;
-		if (alloc->recv.min_latency &&
-		    alloc->recv.min_latency < min_latency)
+		if (alloc->recv.min_latency < min_latency)
 			min_latency = alloc->recv.min_latency;
 
 		total_latency += alloc->recv.sum_latency;
